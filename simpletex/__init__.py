@@ -107,8 +107,8 @@ def latex_escape(text) -> str:
 
 
 def write(text):
-    """Write the given string to the current top-level context."""
-    _CONTEXT.write(str(text))
+    """Write the given text to the current top-level context."""
+    _CONTEXT.write(text)
 
 
 def write_break(text):

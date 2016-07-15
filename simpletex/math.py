@@ -6,10 +6,11 @@ This module provides formatters to create and display LaTeX equations.
 """
 
 from simpletex.core import Formatter
-from simpletex.base import Command
+from simpletex.base import Command, Environment
 
 __all__ = ('Equation',
-           'Add', 'Subtract', 'Multiply', 'Divide')
+           'Add', 'Subtract', 'Multiply', 'Divide',
+           'Matrix')
 
 
 class Equation(Formatter):
@@ -79,9 +80,13 @@ class Multiply(Operator):
     """Multiplies arguments together in symbolic form."""
 
     _SYMBOL_DICT = {None: '',
+                    '.': Command('cdot '),
                     'dot': Command('cdot '),
+                    'x': Command('times '),
                     'cross': Command('times '),
-                    'times': Command('times ')}
+                    'times': Command('times '),
+                    '*': '*',
+                    'star': '*'}
     """
     An internal dictionary storing the symbols' names
     and their corresponding TeX commands.
@@ -94,8 +99,10 @@ class Multiply(Operator):
         symbol : str or None
             Chooses the multiplication symbol to use.
             If ``None``, no explicit symbol is used.
-            If 'dot', a dot-style (``\cdot``) operator is used.
-            If 'cross' or 'times', a cross-style (``\times``) operator is used.
+            If '.' or 'dot', a dot-style (``\cdot``) operator is used.
+            If 'x', 'cross', or 'times', a cross-style (``\times``)
+            operator is used.
+            If '*' or 'star', a star-style (``*``) operator is used.
         """
         super().__init__(self._SYMBOL_DICT[symbol])
 
@@ -116,20 +123,75 @@ class Divide(Operator):
         super().__init__('')
         self._inline = inline
 
-    def _format_text(self, text) -> str:
+    def __call__(self, numerator, denominator=None) -> str:
         """
         Format the given text using the division operator.
 
-        text : iterable of str
-            Must have a length of two. The first element is the numerator,
-            and the second is the denominator.
-            If the length is not two, throws a ``ValueError``.
+        numerator : value or iterable
+            If ``denominator`` is not ``None``, acts as the numerator
+            for the fraction. Otherwise, must be an iterable of length two,
+            whose first element is the numerator and whose second element
+            is the denominator.
+        denominator : value or None
         """
-        if len(text) != 2:
-            error_string = '{} operation must have exactly two arguments.'
-            raise ValueError(error_string.format(self.__class__.__name__))
+        if denominator is None:
+            try:
+                if len(numerator) != 2:
+                    error_string = '{} must have exactly two arguments.'
+                    raise ValueError(error_string.format(self.__class__.__name__))
+            except TypeError:
+                error_string = 'Numerator invalid, denominator not provided.'
+                raise ValueError(error_string.format(self.__class__.__name__))
+            numerator, denominator = numerator
+        if self._inline:
+            return '{}/{}'.format(numerator, denominator)
         else:
-            if self._inline:
-                return '{}/{}'.format(*text)
-            else:
-                return Command('frac', text)
+            return Command('frac', [numerator, denominator])
+
+
+class Matrix(Environment):
+    """
+    Represents a matrix.
+
+    Can be contstructed either with nested lists or a 2D numpy array.
+    Numpy is not requred.
+    """
+
+    _BRACKET_DICT = {'': '',
+                     '(': 'p',
+                     '[': 'b',
+                     '{': 'B',
+                     '|': 'v',
+                     '||': 'V'}
+    """Lookup dictionary for bracket types."""
+
+    def __init__(self, brackets: str = '['):
+        """
+        Create a new empty matrix.
+
+        brackets : str
+            Type of brackets to use. Supported options are '' (no brackets),
+            '(', '[', '{', '|', and '||'.
+        """
+        environment_name = '{}matrix'.format(self._BRACKET_DICT[brackets])
+        super().__init__(environment_name)
+
+    @staticmethod
+    def _matrix_line(elements) -> str:
+        """
+        Format the given list of elements as a single matrix line.
+
+        elements : iterable
+            Elements to include in the line.
+        """
+        return ' & '.join(map(str, elements)) + r' \\'
+
+    def _format_text(self, data) -> str:
+        """
+        Format the given data as a matrix.
+
+        data : iterable of iterables or a 2D numpy array.
+            The data to include in the matrix.
+        """
+        return super()._format_text('\n'.join(self._matrix_line(line)
+                                              for line in data))
